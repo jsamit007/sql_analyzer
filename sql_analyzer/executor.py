@@ -33,6 +33,7 @@ class QueryResult:
     suggestions: List[str] = field(default_factory=list)
     performance_score: Optional[int] = None
     is_slow: bool = False
+    join_diagnostic: Optional[Any] = None  # JoinDiagnostic when JOIN returns 0 rows
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to a dictionary for serialization."""

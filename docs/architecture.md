@@ -25,6 +25,14 @@ SQL Analyzer is a modular Python CLI tool that analyzes SQL file performance. It
                    └─────────────┘                               │
                                                                  ▼
                                                           ┌──────────────┐
+                                                          │JOIN Analyzer │
+                                                          │  (auto)      │
+                                                          │ Diagnose     │
+                                                          │ empty JOINs  │
+                                                          └──────┬───────┘
+                                                                 │
+                                                                 ▼
+                                                          ┌──────────────┐
                                                           │    Report    │
                                                           │              │
                                                           │ Rich console │
@@ -43,8 +51,9 @@ sql_analyzer.py  (entry point)
 ├── sql_analyzer/executor.py            ← depends on db_connector.py, sql_parser.py
 ├── sql_analyzer/plan_analyzer.py       ← no internal deps
 ├── sql_analyzer/suggestions.py         ← depends on plan_analyzer.py, sql_parser.py
+├── sql_analyzer/join_analyzer.py       ← depends on db_connector.py
 ├── sql_analyzer/ai_advisor.py          ← no internal deps (lazy imports)
-└── sql_analyzer/report.py              ← depends on executor.py (QueryResult), sql_parser.py
+└── sql_analyzer/report.py              ← depends on executor.py (QueryResult), join_analyzer.py, sql_parser.py
 ```
 
 ## Key Data Structures
@@ -69,6 +78,7 @@ class QueryResult:
     suggestions: list[str]      # Optimization recommendations
     performance_score: int | None  # 1-10 score
     is_slow: bool               # Exceeds threshold
+    join_diagnostic: Any | None # JoinDiagnostic if JOIN returned 0 rows
 ```
 
 ### `PlanMetrics` (plan_analyzer.py)
@@ -108,5 +118,7 @@ Encrypted database passwords, stored as Fernet tokens in a JSON file. Machine-bo
 5. **AI is always optional** — The AI advisor functions return `None` gracefully on any failure. The pipeline never depends on AI being available.
 
 6. **Line number tracking** — Statements are correlated back to the original file by searching for the first meaningful line of each parsed statement in the raw file content. This survives comment stripping and whitespace normalization.
+
+8. **JOIN decomposition** — When a multi-JOIN SELECT returns 0 rows, the analyzer automatically breaks the query apart, checks individual table row counts, and incrementally reconstructs the JOIN chain to pinpoint which table or condition causes the empty result. See [JOIN Analyzer](join-analyzer.md).
 
 7. **Secure password handling** — Database passwords are never stored in plain text. They are prompted with hidden input (`getpass`), encrypted with Fernet (AES-128-CBC + HMAC-SHA256), and saved to a machine-bound `.credentials` file. CLI args and env vars still work as overrides for scripted usage.

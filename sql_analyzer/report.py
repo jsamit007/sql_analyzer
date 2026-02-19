@@ -12,9 +12,9 @@ from typing import Any, Dict, List
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from .executor import BatchResult, QueryResult
+from .join_analyzer import JoinDiagnostic
 from .sql_parser import truncate_query_text
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,132 @@ def print_batch_result(result: BatchResult, colored: bool = True) -> None:
         if not result.success:
             print(f"Error: {result.error_message}")
         print(sep)
+
+
+def print_join_diagnostic(diagnostic: JoinDiagnostic, colored: bool = True) -> None:
+    """Print JOIN decomposition diagnostic to the console.
+
+    Shows per-table row counts and incremental JOIN step analysis
+    to help identify which table or condition causes 0 rows.
+
+    Args:
+        diagnostic: JoinDiagnostic result.
+        colored: Whether to use colored output.
+    """
+    if colored:
+        _print_join_diagnostic_rich(diagnostic)
+    else:
+        _print_join_diagnostic_plain(diagnostic)
+
+
+def _print_join_diagnostic_rich(diagnostic: JoinDiagnostic) -> None:
+    """Rich-formatted JOIN diagnostic output."""
+    lines = []
+    lines.append("[bold yellow]JOIN Diagnostic \u2014 0 rows returned[/bold yellow]")
+    lines.append("")
+
+    # Table row counts
+    lines.append("[bold]Individual Table Row Counts:[/bold]")
+    table = Table(show_header=True, box=None, padding=(0, 2))
+    table.add_column("Table", style="cyan")
+    table.add_column("Alias", style="dim")
+    table.add_column("Rows", justify="right")
+    table.add_column("Status")
+
+    for tc in diagnostic.table_counts:
+        if tc.error:
+            status = f"[red]Error: {tc.error}[/red]"
+        elif tc.row_count == 0:
+            status = "[red]\u2717 EMPTY[/red]"
+        else:
+            status = "[green]\u2713[/green]"
+
+        table.add_row(
+            tc.table_name,
+            tc.alias if tc.alias != tc.table_name else "",
+            str(tc.row_count),
+            status,
+        )
+
+    console.print(Panel(
+        "\n".join(lines),
+        border_style="yellow",
+        title="JOIN Diagnostic",
+        expand=True,
+    ))
+    console.print(table)
+
+    # Incremental JOIN steps
+    if diagnostic.join_steps:
+        console.print()
+        console.print("[bold]Incremental JOIN Analysis:[/bold]")
+        step_table = Table(show_header=True, box=None, padding=(0, 2))
+        step_table.add_column("Step", style="bold", justify="right")
+        step_table.add_column("Tables Joined", style="cyan")
+        step_table.add_column("Rows", justify="right")
+        step_table.add_column("Status")
+
+        for step in diagnostic.join_steps:
+            tables_str = " \u2192 ".join(step.tables_joined)
+            if step.error:
+                status = f"[red]Error[/red]"
+                row_str = "-"
+            elif step.row_count == 0:
+                status = "[red]\u2717 drops to 0[/red]"
+                row_str = "[red]0[/red]"
+            else:
+                status = "[green]\u2713[/green]"
+                row_str = str(step.row_count)
+
+            step_table.add_row(
+                str(step.step),
+                tables_str,
+                row_str,
+                status,
+            )
+
+        console.print(step_table)
+
+    # Culprit summary
+    if diagnostic.culprit_reason:
+        console.print()
+        console.print(
+            Panel(
+                f"[bold red]Root Cause:[/bold red] {diagnostic.culprit_reason}",
+                border_style="red",
+                expand=True,
+            )
+        )
+
+
+def _print_join_diagnostic_plain(diagnostic: JoinDiagnostic) -> None:
+    """Plain text JOIN diagnostic output."""
+    sep = "=" * 60
+    print(sep)
+    print("JOIN Diagnostic \u2014 0 rows returned")
+    print(sep)
+
+    print("\nIndividual Table Row Counts:")
+    for tc in diagnostic.table_counts:
+        status = "EMPTY" if tc.row_count == 0 else "OK"
+        if tc.error:
+            status = f"Error: {tc.error}"
+        alias_str = f" ({tc.alias})" if tc.alias != tc.table_name else ""
+        print(f"  {tc.table_name}{alias_str}: {tc.row_count} rows [{status}]")
+
+    if diagnostic.join_steps:
+        print("\nIncremental JOIN Analysis:")
+        for step in diagnostic.join_steps:
+            tables_str = " -> ".join(step.tables_joined)
+            status = "drops to 0" if step.row_count == 0 else "OK"
+            if step.error:
+                status = f"Error: {step.error}"
+            print(f"  Step {step.step}: {tables_str} = {step.row_count} rows [{status}]")
+
+    if diagnostic.culprit_reason:
+        print(f"\nRoot Cause: {diagnostic.culprit_reason}")
+
+    print(sep)
 
 
 def print_query_result(result: QueryResult, colored: bool = True) -> None:

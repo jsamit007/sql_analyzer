@@ -13,6 +13,7 @@ Developer reference for the SQL Analyzer codebase. Each page covers one module i
 | [SQL Parser](parser.md) | `sql_analyzer/sql_parser.py` | File loading, query splitting, line number tracking |
 | [Database Connector](database.md) | `sql_analyzer/db_connector.py` | Connection management, transactions, cursor lifecycle |
 | [Query Executor](executor.md) | `sql_analyzer/executor.py` | Execution timing, EXPLAIN plans, error handling |
+| [JOIN Analyzer](join-analyzer.md) | `sql_analyzer/join_analyzer.py` | Decompose empty JOIN results, pinpoint missing data |
 | [Plan Analyzer](plan-analyzer.md) | `sql_analyzer/plan_analyzer.py` | EXPLAIN parsing for PostgreSQL, SQL Server, SQLite |
 | [Suggestion Engine](suggestions.md) | `sql_analyzer/suggestions.py` | Rule-based performance warnings and recommendations |
 | [AI Advisor](ai-advisor.md) | `sql_analyzer/ai_advisor.py` | OpenAI, Groq, and Ollama integration |

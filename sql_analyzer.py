@@ -26,9 +26,11 @@ from sql_analyzer.credential_manager import (
 )
 from sql_analyzer.db_connector import DatabaseConnector
 from sql_analyzer.executor import BatchResult, QueryResult, execute_all_queries, execute_as_script
+from sql_analyzer.join_analyzer import diagnose_empty_join, has_joins
 from sql_analyzer.plan_analyzer import analyze_query_plan
 from sql_analyzer.report import (
     print_batch_result,
+    print_join_diagnostic,
     print_query_detail,
     print_query_result,
     print_query_result_compact,
@@ -539,6 +541,29 @@ def run_analysis(
                     if ai_advice:
                         result.suggestions.append(f"[AI] {ai_advice}")
 
+                # JOIN diagnosis: if SELECT with JOINs returned 0 rows
+                if (
+                    result.query_type == "SELECT"
+                    and result.rows_affected == 0
+                    and has_joins(result.query_text)
+                ):
+                    try:
+                        diag = diagnose_empty_join(
+                            connector=connector,
+                            query=result.query_text,
+                        )
+                        if diag:
+                            result.join_diagnostic = diag
+                            result.warnings.append(
+                                "JOIN query returned 0 rows — "
+                                "see JOIN diagnostic below for details."
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            "JOIN diagnosis failed for query #%d: %s",
+                            result.query_number, e,
+                        )
+
             # Print result
             if analyzer_config.batch_mode:
                 # Batch mode: print full result including plan + AI
@@ -546,6 +571,10 @@ def run_analysis(
             else:
                 # Interactive mode: compact view, details on demand
                 print_query_result_compact(result, colored=colored)
+
+            # Show JOIN diagnostic immediately when detected
+            if result.join_diagnostic:
+                print_join_diagnostic(result.join_diagnostic, colored=colored)
 
         # Step 5: Print summary
         print_summary(results, colored=colored)

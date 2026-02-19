@@ -11,6 +11,7 @@ A production-ready SQL performance analyzer that parses `.sql` files, executes q
 - **AI-powered advice** — optional integration with OpenAI, Groq (free tier), or Ollama (local, no auth)
 - **Interactive detail view** — after the summary, choose which query's execution plan & AI recommendation to inspect
 - **Interest threshold filtering** — only queries exceeding a configurable time threshold (default: 300ms) are offered for detail inspection and AI analysis
+- **JOIN decomposition** — when a multi-JOIN SELECT returns 0 rows, automatically diagnoses which table is empty or which join condition eliminates all matches
 - **Rich console output** — colored panels, tables, and performance scores via Rich library
 - **Secure password management** — database passwords prompted interactively (hidden input), encrypted with Fernet (AES), and saved locally
 - **Export** — JSON and CSV report generation
