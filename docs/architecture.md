@@ -36,14 +36,15 @@ SQL Analyzer is a modular Python CLI tool that analyzes SQL file performance. It
 
 ```
 sql_analyzer.py  (entry point)
-├── sql_analyzer/config.py        ← no internal deps
-├── sql_analyzer/sql_parser.py    ← no internal deps (uses sqlparse)
-├── sql_analyzer/db_connector.py  ← depends on config.py
-├── sql_analyzer/executor.py      ← depends on db_connector.py, sql_parser.py
-├── sql_analyzer/plan_analyzer.py ← no internal deps
-├── sql_analyzer/suggestions.py   ← depends on plan_analyzer.py, sql_parser.py
-├── sql_analyzer/ai_advisor.py    ← no internal deps (lazy imports)
-└── sql_analyzer/report.py        ← depends on executor.py (QueryResult), sql_parser.py
+├── sql_analyzer/config.py              ← no internal deps
+├── sql_analyzer/credential_manager.py  ← no internal deps (uses cryptography)
+├── sql_analyzer/sql_parser.py          ← no internal deps (uses sqlparse)
+├── sql_analyzer/db_connector.py        ← depends on config.py
+├── sql_analyzer/executor.py            ← depends on db_connector.py, sql_parser.py
+├── sql_analyzer/plan_analyzer.py       ← no internal deps
+├── sql_analyzer/suggestions.py         ← depends on plan_analyzer.py, sql_parser.py
+├── sql_analyzer/ai_advisor.py          ← no internal deps (lazy imports)
+└── sql_analyzer/report.py              ← depends on executor.py (QueryResult), sql_parser.py
 ```
 
 ## Key Data Structures
@@ -90,6 +91,10 @@ class PlanMetrics:
 
 Both support `from_env()` class methods that read from environment variables / `.env` files.
 
+### Credential Storage (.credentials)
+
+Encrypted database passwords, stored as Fernet tokens in a JSON file. Machine-bound — the encryption key is derived from the hostname, OS, and MAC address. See [Credential Manager](credential-manager.md) for details.
+
 ## Design Decisions
 
 1. **Lazy imports for drivers** — `psycopg2`, `pyodbc`, `openai`, `ollama`, `groq` are imported inside functions, not at module level. This avoids `ImportError` when a user only needs one backend.
@@ -103,3 +108,5 @@ Both support `from_env()` class methods that read from environment variables / `
 5. **AI is always optional** — The AI advisor functions return `None` gracefully on any failure. The pipeline never depends on AI being available.
 
 6. **Line number tracking** — Statements are correlated back to the original file by searching for the first meaningful line of each parsed statement in the raw file content. This survives comment stripping and whitespace normalization.
+
+7. **Secure password handling** — Database passwords are never stored in plain text. They are prompted with hidden input (`getpass`), encrypted with Fernet (AES-128-CBC + HMAC-SHA256), and saved to a machine-bound `.credentials` file. CLI args and env vars still work as overrides for scripted usage.

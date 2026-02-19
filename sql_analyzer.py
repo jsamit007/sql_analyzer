@@ -20,11 +20,17 @@ from sql_analyzer.ai_advisor import (
     get_ollama_suggestions,
 )
 from sql_analyzer.config import AnalyzerConfig, DatabaseConfig, setup_logging
+from sql_analyzer.credential_manager import (
+    delete_credentials,
+    prompt_and_save_password,
+)
 from sql_analyzer.db_connector import DatabaseConnector
 from sql_analyzer.executor import QueryResult, execute_all_queries
 from sql_analyzer.plan_analyzer import analyze_query_plan
 from sql_analyzer.report import (
+    print_query_detail,
     print_query_result,
+    print_query_result_compact,
     print_summary,
     save_csv_report,
     save_json_report,
@@ -74,17 +80,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pg-port", type=int, default=None, help="PostgreSQL port.")
     parser.add_argument("--pg-database", default=None, help="PostgreSQL database name.")
     parser.add_argument("--pg-user", default=None, help="PostgreSQL user.")
-    parser.add_argument("--pg-password", default=None, help="PostgreSQL password.")
+    parser.add_argument("--pg-password", default=None, help="PostgreSQL password (prefer interactive prompt).")
 
     # SQL Server connection
     parser.add_argument("--mssql-server", default=None, help="SQL Server host.")
     parser.add_argument("--mssql-database", default=None, help="SQL Server database.")
     parser.add_argument("--mssql-user", default=None, help="SQL Server user.")
-    parser.add_argument("--mssql-password", default=None, help="SQL Server password.")
+    parser.add_argument("--mssql-password", default=None, help="SQL Server password (prefer interactive prompt).")
     parser.add_argument(
         "--mssql-trusted",
         action="store_true",
         help="Use Windows trusted connection for SQL Server.",
+    )
+    parser.add_argument(
+        "--reset-password",
+        action="store_true",
+        help="Delete saved encrypted passwords and prompt again.",
     )
 
     # Analysis settings
@@ -103,6 +114,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--stop-on-error",
         action="store_true",
         help="Stop execution on first query error.",
+    )
+    parser.add_argument(
+        "--interest-threshold",
+        type=float,
+        default=300.0,
+        help="Only show execution plan/AI for queries slower than this (ms, default: 300).",
     )
 
     # Output settings
@@ -214,6 +231,11 @@ def build_configs(args: argparse.Namespace) -> tuple[DatabaseConfig, AnalyzerCon
     db_config = DatabaseConfig.from_env(db_type=args.db)
     analyzer_config = AnalyzerConfig.from_env()
 
+    # Handle --reset-password: wipe saved credentials before anything else
+    if args.reset_password:
+        delete_credentials()
+        console.print("[green]Saved credentials deleted.[/green]\n")
+
     # Override DB config with CLI args
     if args.pg_host:
         db_config.pg_host = args.pg_host
@@ -226,6 +248,13 @@ def build_configs(args: argparse.Namespace) -> tuple[DatabaseConfig, AnalyzerCon
     if args.pg_password:
         db_config.pg_password = args.pg_password
 
+    # Prompt for PostgreSQL password if not provided via CLI or env
+    if args.db == "postgres" and not db_config.pg_password:
+        db_config.pg_password = prompt_and_save_password(
+            db_type="pg",
+            label="PostgreSQL",
+        )
+
     if args.mssql_server:
         db_config.mssql_server = args.mssql_server
     if args.mssql_database:
@@ -237,12 +266,24 @@ def build_configs(args: argparse.Namespace) -> tuple[DatabaseConfig, AnalyzerCon
     if args.mssql_trusted:
         db_config.mssql_trusted_connection = True
 
+    # Prompt for SQL Server password if not provided and not using trusted connection
+    if (
+        args.db == "sqlserver"
+        and not db_config.mssql_trusted_connection
+        and not db_config.mssql_password
+    ):
+        db_config.mssql_password = prompt_and_save_password(
+            db_type="mssql",
+            label="SQL Server",
+        )
+
     if args.sqlite_path:
         db_config.sqlite_path = args.sqlite_path
 
     # Override analyzer config with CLI args
     analyzer_config.explain_analyze = args.explain_analyze
     analyzer_config.slow_query_threshold_ms = args.slow_threshold
+    analyzer_config.interest_threshold_ms = args.interest_threshold
     analyzer_config.continue_on_error = not args.stop_on_error
     analyzer_config.save_json = args.save_json
     analyzer_config.json_output_path = args.json_path
@@ -445,8 +486,11 @@ def run_analysis(
                 result.suggestions = suggestions
                 result.performance_score = metrics.performance_score
 
-                # AI suggestions (if enabled)
-                if result.query_type == "SELECT":
+                # AI suggestions (if enabled) — only for queries above interest threshold
+                if (
+                    result.query_type == "SELECT"
+                    and result.execution_time_ms > analyzer_config.interest_threshold_ms
+                ):
                     ai_advice = None
 
                     if analyzer_config.groq_enabled:
@@ -477,16 +521,122 @@ def run_analysis(
                     if ai_advice:
                         result.suggestions.append(f"[AI] {ai_advice}")
 
-            # Print individual result
-            print_query_result(result, colored=colored)
+            # Print compact result (no execution plan or AI details)
+            print_query_result_compact(result, colored=colored)
 
         # Step 5: Print summary
         print_summary(results, colored=colored)
+
+        # Step 6: Interactive prompt for query details
+        _interactive_detail_prompt(
+            results,
+            colored=colored,
+            interest_threshold_ms=analyzer_config.interest_threshold_ms,
+        )
 
         return results
 
     finally:
         connector.close()
+
+
+def _interactive_detail_prompt(
+    results: List[QueryResult],
+    colored: bool = True,
+    interest_threshold_ms: float = 300.0,
+) -> None:
+    """Prompt user to select a query to view execution plan and AI suggestions.
+
+    Only queries with execution time above interest_threshold_ms are offered.
+
+    Args:
+        results: All query results.
+        colored: Whether to use colored output.
+        interest_threshold_ms: Minimum execution time (ms) for a query to be listed.
+    """
+    # Build lookup of queries that have plan or AI suggestions AND exceed threshold
+    detail_map = {}
+    for r in results:
+        if not r.success:
+            continue
+        if r.execution_time_ms <= interest_threshold_ms:
+            continue
+        has_plan = bool(r.explain_output)
+        has_ai = any(s.startswith("[AI]") for s in r.suggestions)
+        if has_plan or has_ai:
+            detail_map[r.query_number] = r
+
+    if not detail_map:
+        if colored:
+            console.print(
+                f"\n[dim]No queries exceeded the interest threshold "
+                f"({interest_threshold_ms:.0f} ms). Nothing to inspect.[/dim]"
+            )
+        else:
+            print(
+                f"\nNo queries exceeded the interest threshold "
+                f"({interest_threshold_ms:.0f} ms). Nothing to inspect."
+            )
+        return
+
+    available = sorted(detail_map.keys())
+    console.print()
+    if colored:
+        console.print(
+            f"[bold cyan]Queries above {interest_threshold_ms:.0f} ms threshold — "
+            f"enter a number to view execution plan & AI recommendation.[/bold cyan]"
+        )
+        console.print(
+            f"[dim]Available: {', '.join(str(n) for n in available)}  "
+            "(type 'all' for all, or 'q' to skip)[/dim]"
+        )
+    else:
+        print(
+            f"Queries above {interest_threshold_ms:.0f} ms threshold — "
+            f"enter a number to view execution plan & AI recommendation."
+        )
+        print(
+            f"Available: {', '.join(str(n) for n in available)}  "
+            "(type 'all' for all, or 'q' to skip)"
+        )
+
+    while True:
+        try:
+            choice = input("\nQuery #> ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            console.print()
+            break
+
+        if choice in ("", "q", "quit", "exit"):
+            break
+
+        if choice == "all":
+            for num in available:
+                print_query_detail(detail_map[num], colored=colored)
+            continue
+
+        # Support comma-separated list like "1,3,5"
+        nums = [n.strip() for n in choice.split(",")]
+        valid = True
+        for n in nums:
+            if not n.isdigit():
+                console.print(f"[red]Invalid input: '{n}'. Enter a query number, 'all', or 'q'.[/red]")
+                valid = False
+                break
+            qnum = int(n)
+            if qnum not in detail_map:
+                if qnum in {r.query_number for r in results}:
+                    console.print(
+                        f"[yellow]Query #{qnum} has no execution plan or AI details.[/yellow]"
+                    )
+                else:
+                    console.print(f"[red]Query #{qnum} not found.[/red]")
+                valid = False
+                break
+
+        if valid:
+            for n in nums:
+                print_query_detail(detail_map[int(n)], colored=colored)
 
 
 def main() -> None:

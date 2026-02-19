@@ -35,6 +35,32 @@ def print_query_result(result: QueryResult, colored: bool = True) -> None:
         _print_query_result_plain(result)
 
 
+def print_query_result_compact(result: QueryResult, colored: bool = True) -> None:
+    """Print a compact query result without execution plan or AI suggestions.
+
+    Args:
+        result: QueryResult to display.
+        colored: Whether to use colored output.
+    """
+    if colored:
+        _print_query_result_compact_rich(result)
+    else:
+        _print_query_result_compact_plain(result)
+
+
+def print_query_detail(result: QueryResult, colored: bool = True) -> None:
+    """Print execution plan and AI suggestions for a selected query.
+
+    Args:
+        result: QueryResult whose details to display.
+        colored: Whether to use colored output.
+    """
+    if colored:
+        _print_query_detail_rich(result)
+    else:
+        _print_query_detail_plain(result)
+
+
 def _print_query_result_rich(result: QueryResult) -> None:
     """Print query result using Rich library for colored output."""
     # Determine panel color based on status
@@ -103,6 +129,172 @@ def _print_query_result_rich(result: QueryResult) -> None:
 
     content = "\n".join(lines)
     console.print(Panel(content, border_style=border_style, expand=True))
+
+
+def _print_query_result_compact_rich(result: QueryResult) -> None:
+    """Print compact query result using Rich (no execution plan or AI suggestions)."""
+    if not result.success:
+        border_style = "red"
+        status_icon = "[red]\u2717 FAILED[/red]"
+    elif result.is_slow:
+        border_style = "yellow"
+        status_icon = "[yellow]\u26a0 SLOW[/yellow]"
+    elif result.performance_score is not None and result.performance_score <= 4:
+        border_style = "yellow"
+        status_icon = "[yellow]\u26a0 NEEDS OPTIMIZATION[/yellow]"
+    else:
+        border_style = "green"
+        status_icon = "[green]\u2713 OK[/green]"
+
+    lines = []
+    line_info = f"  [magenta](line {result.line_number})[/magenta]" if result.line_number else ""
+    lines.append(f"[bold]Query #{result.query_number}[/bold]{line_info}  {status_icon}")
+    lines.append(f"[dim]{truncate_query_text(result.query_text, 120)}[/dim]")
+    lines.append("")
+
+    if result.success:
+        lines.append(f"Execution Time: [cyan]{result.execution_time_ms:.2f} ms[/cyan]")
+        lines.append(f"Rows Affected:  [cyan]{result.rows_affected}[/cyan]")
+        lines.append(f"Query Type:     [cyan]{result.query_type}[/cyan]")
+
+        if result.performance_score is not None:
+            score = result.performance_score
+            if score >= 8:
+                score_color = "green"
+            elif score >= 5:
+                score_color = "yellow"
+            else:
+                score_color = "red"
+            lines.append(
+                f"Perf Score:     [{score_color}]{score}/10[/{score_color}]"
+            )
+    else:
+        lines.append(f"[red]Error: {result.error_message}[/red]")
+
+    # Warnings (still shown in compact view)
+    if result.warnings:
+        lines.append("")
+        lines.append("[bold yellow]Performance Warnings:[/bold yellow]")
+        for w in result.warnings:
+            lines.append(f"  [yellow]\u2022 {w}[/yellow]")
+
+    # Non-AI suggestions only (still shown in compact view)
+    non_ai_suggestions = [s for s in result.suggestions if not s.startswith("[AI]")]
+    if non_ai_suggestions:
+        lines.append("")
+        lines.append("[bold cyan]Suggestions:[/bold cyan]")
+        for s in non_ai_suggestions:
+            lines.append(f"  [bright_white]\u2192 {s}[/bright_white]")
+
+    # Hint about available details
+    has_plan = bool(result.explain_output)
+    has_ai = any(s.startswith("[AI]") for s in result.suggestions)
+    if has_plan or has_ai:
+        lines.append("")
+        detail_parts = []
+        if has_plan:
+            detail_parts.append("execution plan")
+        if has_ai:
+            detail_parts.append("AI recommendation")
+        lines.append(
+            f"[dim italic]\u2139 {' & '.join(detail_parts)} available — "
+            f"enter query #{result.query_number} after summary to view[/dim italic]"
+        )
+
+    content = "\n".join(lines)
+    console.print(Panel(content, border_style=border_style, expand=True))
+
+
+def _print_query_result_compact_plain(result: QueryResult) -> None:
+    """Print compact query result in plain text (no execution plan or AI)."""
+    sep = "-" * 60
+    print(sep)
+    line_info = f" (line {result.line_number})" if result.line_number else ""
+    print(f"Query #{result.query_number}{line_info}")
+    print(f"SQL: {truncate_query_text(result.query_text, 120)}")
+
+    if result.success:
+        print(f"Execution Time: {result.execution_time_ms:.2f} ms")
+        print(f"Rows Affected: {result.rows_affected}")
+        print(f"Query Type: {result.query_type}")
+        if result.performance_score is not None:
+            print(f"Performance Score: {result.performance_score}/10")
+    else:
+        print(f"ERROR: {result.error_message}")
+
+    if result.warnings:
+        print("Performance Warnings:")
+        for w in result.warnings:
+            print(f"  - {w}")
+
+    non_ai_suggestions = [s for s in result.suggestions if not s.startswith("[AI]")]
+    if non_ai_suggestions:
+        print("Suggestions:")
+        for s in non_ai_suggestions:
+            print(f"  - {s}")
+
+    has_plan = bool(result.explain_output)
+    has_ai = any(s.startswith("[AI]") for s in result.suggestions)
+    if has_plan or has_ai:
+        detail_parts = []
+        if has_plan:
+            detail_parts.append("execution plan")
+        if has_ai:
+            detail_parts.append("AI recommendation")
+        print(f"  [i] {' & '.join(detail_parts)} available — enter query #{result.query_number} after summary to view")
+
+    print(sep)
+
+
+def _print_query_detail_rich(result: QueryResult) -> None:
+    """Print execution plan and AI suggestions using Rich."""
+    lines = []
+    line_info = f"  [magenta](line {result.line_number})[/magenta]" if result.line_number else ""
+    lines.append(f"[bold]Query #{result.query_number}[/bold]{line_info}")
+    lines.append(f"[dim]{truncate_query_text(result.query_text, 120)}[/dim]")
+    lines.append("")
+
+    if result.explain_output:
+        lines.append("[bold white]Execution Plan:[/bold white]")
+        for plan_line in result.explain_output.splitlines():
+            lines.append(f"  [dim]{plan_line}[/dim]")
+    else:
+        lines.append("[dim]No execution plan available for this query.[/dim]")
+
+    ai_suggestions = [s for s in result.suggestions if s.startswith("[AI]")]
+    if ai_suggestions:
+        lines.append("")
+        lines.append("[bold bright_green]AI Recommendations:[/bold bright_green]")
+        for s in ai_suggestions:
+            lines.append(f"  [bright_green]{s}[/bright_green]")
+
+    content = "\n".join(lines)
+    console.print(Panel(content, border_style="cyan", title="Query Detail", expand=True))
+
+
+def _print_query_detail_plain(result: QueryResult) -> None:
+    """Print execution plan and AI suggestions in plain text."""
+    sep = "=" * 60
+    print(sep)
+    line_info = f" (line {result.line_number})" if result.line_number else ""
+    print(f"Query #{result.query_number}{line_info} — Detail View")
+    print(f"SQL: {truncate_query_text(result.query_text, 120)}")
+    print()
+
+    if result.explain_output:
+        print("Execution Plan:")
+        for plan_line in result.explain_output.splitlines():
+            print(f"  {plan_line}")
+    else:
+        print("No execution plan available for this query.")
+
+    ai_suggestions = [s for s in result.suggestions if s.startswith("[AI]")]
+    if ai_suggestions:
+        print("\nAI Recommendations:")
+        for s in ai_suggestions:
+            print(f"  {s}")
+
+    print(sep)
 
 
 def _print_query_result_plain(result: QueryResult) -> None:

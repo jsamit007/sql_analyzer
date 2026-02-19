@@ -68,6 +68,7 @@ class AnalyzerConfig:
     # Execution settings
     explain_analyze: bool = False  # Use EXPLAIN ANALYZE (actually runs query)
     slow_query_threshold_ms: float = 500.0  # Threshold to mark as SLOW QUERY
+    interest_threshold_ms: float = 300.0  # Only consider queries above this for detail/AI
     continue_on_error: bool = True  # Continue executing after a query fails
 
     # Output settings
@@ -106,6 +107,9 @@ class AnalyzerConfig:
             explain_analyze=os.getenv("EXPLAIN_ANALYZE", "false").lower() == "true",
             slow_query_threshold_ms=float(
                 os.getenv("SLOW_QUERY_THRESHOLD_MS", "500")
+            ),
+            interest_threshold_ms=float(
+                os.getenv("INTEREST_THRESHOLD_MS", "300")
             ),
             ai_backend=os.getenv("AI_BACKEND", "openai"),
             openai_enabled=os.getenv("OPENAI_ENABLED", "false").lower() == "true",

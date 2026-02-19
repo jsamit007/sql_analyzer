@@ -29,6 +29,9 @@ Holds connection parameters for all three database backends.
 | `pg_database` | `str` | `"postgres"` | `PG_DATABASE` |
 | `pg_user` | `str` | `"postgres"` | `PG_USER` |
 | `pg_password` | `str` | `""` | `PG_PASSWORD` |
+
+> **Note:** Database passwords are preferably prompted interactively and stored encrypted. See [Credential Manager](credential-manager.md) for details. The `PG_PASSWORD` / `MSSQL_PASSWORD` env vars and `--pg-password` / `--mssql-password` CLI args still work but expose passwords in plain text.
+
 | `mssql_driver` | `str` | `"{ODBC Driver 18 for SQL Server}"` | `MSSQL_DRIVER` |
 | `mssql_server` | `str` | `"localhost"` | `MSSQL_SERVER` |
 | `mssql_database` | `str` | `"master"` | `MSSQL_DATABASE` |
@@ -85,7 +88,12 @@ Configures Python's `logging` module:
 ## Configuration Precedence
 
 ```
-CLI args  >  Environment variables (.env)  >  Dataclass defaults
+CLI args  >  Environment variables (.env)  >  Encrypted .credentials  >  Dataclass defaults
+```
+
+For passwords specifically:
+```
+--pg-password CLI arg  >  PG_PASSWORD env var / .env  >  .credentials (encrypted)  >  interactive prompt
 ```
 
 The merging happens in `build_configs()` in `sql_analyzer.py`, not inside the config module itself. The config module only handles env → defaults.

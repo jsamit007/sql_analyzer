@@ -9,6 +9,7 @@ Developer reference for the SQL Analyzer codebase. Each page covers one module i
 | [Architecture](architecture.md) | — | System overview, data flow, and design decisions |
 | [CLI & Entry Point](cli.md) | `sql_analyzer.py` | Argument parsing, config building, pipeline orchestration |
 | [Configuration](config.md) | `sql_analyzer/config.py` | Dataclasses, environment variables, logging setup |
+| [Credential Manager](credential-manager.md) | `sql_analyzer/credential_manager.py` | Password encryption, secure storage, interactive prompts |
 | [SQL Parser](parser.md) | `sql_analyzer/sql_parser.py` | File loading, query splitting, line number tracking |
 | [Database Connector](database.md) | `sql_analyzer/db_connector.py` | Connection management, transactions, cursor lifecycle |
 | [Query Executor](executor.md) | `sql_analyzer/executor.py` | Execution timing, EXPLAIN plans, error handling |

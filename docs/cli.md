@@ -13,7 +13,7 @@ Builds the `argparse` argument parser with all CLI flags. Arguments are grouped 
 | Group | Flags |
 |-------|-------|
 | **Required** | `--file` / `-f` |
-| **Database** | `--db`, `--sqlite-path`, `--pg-*`, `--mssql-*` |
+| **Database** | `--db`, `--sqlite-path`, `--pg-*`, `--mssql-*`, `--reset-password` |
 | **Analysis** | `--explain-analyze`, `--slow-threshold`, `--stop-on-error` |
 | **Output** | `--json`, `--json-path`, `--csv`, `--csv-path`, `--no-color` |
 | **AI (OpenAI)** | `--ai`, `--openai-key`, `--openai-model` |
@@ -27,15 +27,19 @@ Merges configuration from three sources in priority order:
 
 1. **CLI arguments** (highest priority)
 2. **Environment variables** (via `from_env()`)
-3. **Defaults** (dataclass field defaults)
+3. **Encrypted credentials** (via `credential_manager`)
+4. **Defaults** (dataclass field defaults)
 
 Logic:
 ```
 1. Call DatabaseConfig.from_env() and AnalyzerConfig.from_env()
-2. Override each field with CLI arg if the arg was provided
-3. If --ollama is set: set ai_backend = "ollama"
-4. If --groq is set: set ai_backend = "groq"
-5. If AI is enabled but no key → call _prompt_for_api_key()
+2. If --reset-password: delete .credentials file
+3. Override each field with CLI arg if the arg was provided
+4. If db is postgres and no password: call prompt_and_save_password("pg")
+5. If db is sqlserver and no password and not trusted: call prompt_and_save_password("mssql")
+6. If --ollama is set: set ai_backend = "ollama"
+7. If --groq is set: set ai_backend = "groq"
+8. If AI is enabled but no key → call _prompt_for_api_key()
 ```
 
 ### `_prompt_for_api_key(provider, url, env_var) → str`

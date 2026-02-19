@@ -20,6 +20,9 @@ env/
 # Environment variables
 .env
 
+# Encrypted credentials
+.credentials
+
 # IDE
 .vscode/
 .idea/

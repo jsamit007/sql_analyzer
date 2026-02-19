@@ -7,7 +7,10 @@ Sends EXPLAIN output to the chosen backend and returns smart optimization advice
 import logging
 from typing import Optional
 
+from rich.console import Console
+
 logger = logging.getLogger(__name__)
+_console = Console(stderr=True)
 
 SYSTEM_PROMPT = (
     "You are a senior database performance engineer. "
@@ -90,13 +93,18 @@ def get_ollama_suggestions(
     try:
         import ollama as ollama_lib
     except ImportError:
-        logger.error("ollama package not installed. Install with: pip install ollama")
+        msg = "ollama package not installed. Install with: pip install ollama"
+        logger.error(msg)
+        _console.print(f"[red]{msg}[/red]")
         return None
 
     prompt = _build_prompt(query, explain_output)
 
     try:
         client = ollama_lib.Client(host=host)
+        _console.print(
+            f"[dim]Querying Ollama ({model}) for AI suggestions…[/dim]",
+        )
         response = client.chat(
             model=model,
             messages=[
@@ -111,7 +119,9 @@ def get_ollama_suggestions(
         return advice
 
     except Exception as e:
-        logger.error("Ollama call failed: %s", e)
+        msg = f"Ollama call failed: {e}"
+        logger.error(msg)
+        _console.print(f"[red]{msg}[/red]")
         return None
 
 
