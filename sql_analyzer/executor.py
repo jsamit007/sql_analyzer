@@ -301,3 +301,83 @@ def execute_all_queries(
             break
 
     return results
+
+
+@dataclass
+class BatchResult:
+    """Result of executing an entire SQL file as a single script."""
+
+    script_text: str
+    total_statements: int = 0
+    execution_time_ms: float = 0.0
+    success: bool = True
+    error_message: Optional[str] = None
+    rows_affected: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert result to a dictionary for serialization."""
+        return {
+            "total_statements": self.total_statements,
+            "execution_time_ms": round(self.execution_time_ms, 2),
+            "success": self.success,
+            "error_message": self.error_message,
+            "rows_affected": self.rows_affected,
+        }
+
+
+def execute_as_script(
+    connector: DatabaseConnector,
+    sql_content: str,
+    total_statements: int = 0,
+) -> BatchResult:
+    """Execute the entire SQL content as a single script.
+
+    Sends the full SQL text to the database in one call via
+    ``cursor.executescript()`` (SQLite) or ``cursor.execute()``
+    (PostgreSQL / SQL Server), measuring total wall-clock time.
+
+    Args:
+        connector: Active database connector.
+        sql_content: Full SQL file content.
+        total_statements: Number of statements (for display only).
+
+    Returns:
+        BatchResult with overall timing and status.
+    """
+    result = BatchResult(
+        script_text=sql_content,
+        total_statements=total_statements,
+    )
+
+    try:
+        with connector.cursor() as cur:
+            start_time = time.perf_counter()
+
+            if connector.db_type == "sqlite":
+                # SQLite supports executescript for multi-statement scripts
+                cur.executescript(sql_content)
+            else:
+                # PostgreSQL and SQL Server can handle multi-statement strings
+                cur.execute(sql_content)
+
+            end_time = time.perf_counter()
+            result.execution_time_ms = (end_time - start_time) * 1000.0
+
+            if cur.rowcount >= 0:
+                result.rows_affected = cur.rowcount
+
+            connector.commit()
+
+        logger.info(
+            "Batch script executed in %.2f ms (%d statements)",
+            result.execution_time_ms,
+            total_statements,
+        )
+
+    except Exception as e:
+        result.success = False
+        result.error_message = str(e)
+        connector.rollback()
+        logger.error("Batch script failed: %s", e)
+
+    return result

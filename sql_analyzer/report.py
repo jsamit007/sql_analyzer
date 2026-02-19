@@ -14,12 +14,51 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from .executor import QueryResult
+from .executor import BatchResult, QueryResult
 from .sql_parser import truncate_query_text
 
 logger = logging.getLogger(__name__)
 
 console = Console()
+
+
+def print_batch_result(result: BatchResult, colored: bool = True) -> None:
+    """Print the result of a batch (single-script) execution.
+
+    Args:
+        result: BatchResult to display.
+        colored: Whether to use colored output.
+    """
+    if colored:
+        if result.success:
+            border = "green"
+            status = "[green]\u2713 SUCCESS[/green]"
+        else:
+            border = "red"
+            status = "[red]\u2717 FAILED[/red]"
+
+        lines = [
+            f"[bold]Batch Execution[/bold]  {status}",
+            "",
+            f"Statements:     [cyan]{result.total_statements}[/cyan]",
+            f"Total Time:     [cyan]{result.execution_time_ms:.2f} ms[/cyan]",
+            f"Rows Affected:  [cyan]{result.rows_affected}[/cyan]",
+        ]
+        if not result.success:
+            lines.append(f"\n[red]Error: {result.error_message}[/red]")
+
+        console.print(Panel("\n".join(lines), border_style=border, expand=True))
+    else:
+        sep = "=" * 60
+        print(sep)
+        status = "SUCCESS" if result.success else "FAILED"
+        print(f"Batch Execution: {status}")
+        print(f"Statements:      {result.total_statements}")
+        print(f"Total Time:      {result.execution_time_ms:.2f} ms")
+        print(f"Rows Affected:   {result.rows_affected}")
+        if not result.success:
+            print(f"Error: {result.error_message}")
+        print(sep)
 
 
 def print_query_result(result: QueryResult, colored: bool = True) -> None:

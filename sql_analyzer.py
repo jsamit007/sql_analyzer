@@ -25,9 +25,10 @@ from sql_analyzer.credential_manager import (
     prompt_and_save_password,
 )
 from sql_analyzer.db_connector import DatabaseConnector
-from sql_analyzer.executor import QueryResult, execute_all_queries
+from sql_analyzer.executor import BatchResult, QueryResult, execute_all_queries, execute_as_script
 from sql_analyzer.plan_analyzer import analyze_query_plan
 from sql_analyzer.report import (
+    print_batch_result,
     print_query_detail,
     print_query_result,
     print_query_result_compact,
@@ -124,7 +125,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--batch",
         action="store_true",
-        help="Run all queries at once — print full results (plan + AI) without interactive prompt.",
+        help="Run the SQL file as a single script in one database call instead of executing queries individually.",
     )
 
     # Output settings
@@ -459,6 +460,17 @@ def run_analysis(
         sys.exit(1)
 
     try:
+        if analyzer_config.batch_mode:
+            # ── Batch mode: run entire file as a single script ──
+            batch_result = execute_as_script(
+                connector=connector,
+                sql_content=sql_content,
+                total_statements=len(queries),
+            )
+            print_batch_result(batch_result, colored=colored)
+            return []  # No individual QueryResults in batch mode
+
+        # ── Normal mode: execute queries individually ──
         # Step 3: Execute queries
         results = execute_all_queries(
             connector=connector,
