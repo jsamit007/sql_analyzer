@@ -37,39 +37,47 @@ python sql_analyzer.py --file sample.sql --db sqlite --sqlite-path db/database.d
 
 ## Usage
 
+You must choose one of two analysis modes:
+
+- **`--time-queries`** — Full performance analysis: execute, time, EXPLAIN plan, suggestions, AI
+- **`--join-analyzer`** — Only analyze SELECT queries with JOINs: table row counts, incremental join diagnostics
+
 ```bash
-# Basic analysis (SQLite)
-python sql_analyzer.py --file queries.sql --db sqlite --sqlite-path mydb.db
+# Full performance analysis (SQLite)
+python sql_analyzer.py --file queries.sql --time-queries --db sqlite --sqlite-path mydb.db
+
+# JOIN-only analysis
+python sql_analyzer.py --file queries.sql --join-analyzer --db sqlite --sqlite-path mydb.db
 
 # PostgreSQL (password will be prompted securely on first run)
-python sql_analyzer.py --file queries.sql --db postgres --pg-host localhost --pg-database mydb
+python sql_analyzer.py --file queries.sql --time-queries --db postgres --pg-host localhost --pg-database mydb
 
 # SQL Server (password prompted, or use trusted connection)
-python sql_analyzer.py --file queries.sql --db sqlserver --mssql-server localhost --mssql-database mydb
+python sql_analyzer.py --file queries.sql --time-queries --db sqlserver --mssql-server localhost --mssql-database mydb
 
 # Reset saved passwords and prompt again
-python sql_analyzer.py --file queries.sql --db postgres --pg-host localhost --pg-database mydb --reset-password
+python sql_analyzer.py --file queries.sql --time-queries --db postgres --pg-host localhost --pg-database mydb --reset-password
 
 # With AI suggestions (Groq — free tier)
-python sql_analyzer.py --file queries.sql --db sqlite --sqlite-path mydb.db --groq
+python sql_analyzer.py --file queries.sql --time-queries --db sqlite --sqlite-path mydb.db --groq
 
 # With AI suggestions (Ollama — local, no API key)
-python sql_analyzer.py --file queries.sql --db sqlite --sqlite-path mydb.db --ollama
+python sql_analyzer.py --file queries.sql --time-queries --db sqlite --sqlite-path mydb.db --ollama
 
 # With AI suggestions (OpenAI)
-python sql_analyzer.py --file queries.sql --db sqlite --sqlite-path mydb.db --ai
+python sql_analyzer.py --file queries.sql --time-queries --db sqlite --sqlite-path mydb.db --ai
 
 # Only inspect queries slower than 500ms (default: 300ms)
-python sql_analyzer.py --file queries.sql --db sqlite --sqlite-path mydb.db --ollama --interest-threshold 500
+python sql_analyzer.py --file queries.sql --time-queries --db sqlite --sqlite-path mydb.db --ollama --interest-threshold 500
 
 # Inspect all queries regardless of speed
-python sql_analyzer.py --file queries.sql --db sqlite --sqlite-path mydb.db --ollama --interest-threshold 0
+python sql_analyzer.py --file queries.sql --time-queries --db sqlite --sqlite-path mydb.db --ollama --interest-threshold 0
 
 # Export reports
-python sql_analyzer.py --file queries.sql --db sqlite --sqlite-path mydb.db --json --csv
+python sql_analyzer.py --file queries.sql --time-queries --db sqlite --sqlite-path mydb.db --json --csv
 
 # Plain text output (no colors)
-python sql_analyzer.py --file queries.sql --db sqlite --sqlite-path mydb.db --no-color
+python sql_analyzer.py --file queries.sql --time-queries --db sqlite --sqlite-path mydb.db --no-color
 ```
 
 ## CLI Options
@@ -77,6 +85,8 @@ python sql_analyzer.py --file queries.sql --db sqlite --sqlite-path mydb.db --no
 | Flag | Description |
 |------|-------------|
 | `--file`, `-f` | Path to the `.sql` file to analyze (required) |
+| `--time-queries` | Full performance analysis mode (required, mutually exclusive with `--join-analyzer`) |
+| `--join-analyzer` | JOIN-only diagnostic mode (required, mutually exclusive with `--time-queries`) |
 | `--db` | Database type: `postgres`, `sqlserver`, `sqlite` (default: postgres) |
 | `--sqlite-path` | Path to SQLite database file |
 | `--pg-host/port/database/user/password` | PostgreSQL connection settings |

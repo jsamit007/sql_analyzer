@@ -13,6 +13,7 @@ Builds the `argparse` argument parser with all CLI flags. Arguments are grouped 
 | Group | Flags |
 |-------|-------|
 | **Required** | `--file` / `-f` |
+| **Mode** | `--time-queries` \| `--join-analyzer` (mutually exclusive, one required) |
 | **Database** | `--db`, `--sqlite-path`, `--pg-*`, `--mssql-*`, `--reset-password` |
 | **Analysis** | `--explain-analyze`, `--slow-threshold`, `--stop-on-error` |
 | **Output** | `--json`, `--json-path`, `--csv`, `--csv-path`, `--no-color` |
@@ -79,9 +80,30 @@ parser = build_arg_parser()
 args = parser.parse_args()
 db_config, analyzer_config = build_configs(args)
 setup_logging(analyzer_config)
-results = run_analysis(db_config, analyzer_config, args.file)
-# Save JSON/CSV if requested
+if analyzer_config.analysis_mode == "join-analyzer":
+    run_join_analysis(db_config, analyzer_config, args.file)
+else:
+    results = run_analysis(db_config, analyzer_config, args.file)
+    # Save JSON/CSV if requested
 ```
+
+### `run_join_analysis(db_config, analyzer_config, sql_file)`
+
+Dedicated JOIN-only mode (activated by `--join-analyzer`). Pipeline:
+
+```
+1. load_sql_file()          → raw SQL content
+2. split_queries()          → List[(query, line_number)]
+3. Filter to SELECT queries with JOINs (via get_query_type + has_joins)
+4. DatabaseConnector.connect()
+5. For each JOIN query:
+   a. diagnose_empty_join() → JoinDiagnostic
+   b. print_join_diagnostic() → console output
+6. Print summary count
+7. connector.close()
+```
+
+This mode skips timing, EXPLAIN plans, AI suggestions, and the interactive prompt.
 
 ## AI Backend Selection
 

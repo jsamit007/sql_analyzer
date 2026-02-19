@@ -63,6 +63,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Path to the .sql file to analyze.",
     )
 
+    # Analysis mode (mutually exclusive)
+    mode_group = parser.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument(
+        "--time-queries",
+        action="store_true",
+        help="Run full performance analysis: execute queries, time them, EXPLAIN plans, suggestions.",
+    )
+    mode_group.add_argument(
+        "--join-analyzer",
+        action="store_true",
+        help="Analyze only SELECT queries with JOINs: show table row counts and incremental join diagnostics.",
+    )
+
     # Database settings
     parser.add_argument(
         "--db",
@@ -293,6 +306,7 @@ def build_configs(args: argparse.Namespace) -> tuple[DatabaseConfig, AnalyzerCon
     analyzer_config.slow_query_threshold_ms = args.slow_threshold
     analyzer_config.interest_threshold_ms = args.interest_threshold
     analyzer_config.batch_mode = args.batch
+    analyzer_config.analysis_mode = "join-analyzer" if args.join_analyzer else "time-queries"
     analyzer_config.continue_on_error = not args.stop_on_error
     analyzer_config.save_json = args.save_json
     analyzer_config.json_output_path = args.json_path
@@ -593,6 +607,122 @@ def run_analysis(
         connector.close()
 
 
+def run_join_analysis(
+    db_config: DatabaseConfig,
+    analyzer_config: AnalyzerConfig,
+    sql_file: str,
+) -> None:
+    """Run JOIN-only analysis mode.
+
+    Extracts SELECT queries that contain JOINs from the SQL file,
+    executes each one, and runs the JOIN diagnostic to show per-table
+    row counts and incremental join step analysis.
+
+    Args:
+        db_config: Database connection configuration.
+        analyzer_config: Analyzer settings.
+        sql_file: Path to the SQL file.
+    """
+    colored = analyzer_config.colored_output
+
+    # Step 1: Load and parse SQL file
+    console.print(f"\n[bold]Loading SQL file:[/bold] {sql_file}")
+    sql_content = load_sql_file(sql_file)
+    queries = split_queries(sql_content)
+    console.print(f"[bold]Found {len(queries)} executable statements.[/bold]")
+
+    if not queries:
+        console.print("[yellow]No executable SQL statements found.[/yellow]")
+        return
+
+    # Filter to SELECT queries with JOINs
+    join_queries = []
+    for stmt, line_no in queries:
+        qtype = get_query_type(stmt)
+        if qtype == "SELECT" and has_joins(stmt):
+            join_queries.append((stmt, line_no))
+
+    if not join_queries:
+        console.print("[yellow]No SELECT queries with JOINs found in the file.[/yellow]")
+        return
+
+    console.print(
+        f"[bold cyan]Found {len(join_queries)} SELECT "
+        f"{'query' if len(join_queries) == 1 else 'queries'} with JOINs.[/bold cyan]\n"
+    )
+
+    # Step 2: Connect to database
+    connector = DatabaseConnector(db_config)
+    try:
+        connector.connect()
+        if db_config.db_type == "postgres":
+            conn_info = db_config.pg_host
+        elif db_config.db_type == "sqlserver":
+            conn_info = db_config.mssql_server
+        else:
+            conn_info = db_config.sqlite_path
+        console.print(
+            f"[green]Connected to {db_config.db_type} ({conn_info})[/green]\n"
+        )
+    except (ConnectionError, ImportError) as e:
+        console.print(f"[red]Connection failed: {e}[/red]")
+        sys.exit(1)
+
+    try:
+        for idx, (stmt, line_no) in enumerate(join_queries, start=1):
+            # Truncate SQL for display
+            display_sql = stmt.strip().replace("\n", " ")
+            if len(display_sql) > 100:
+                display_sql = display_sql[:97] + "..."
+
+            if colored:
+                console.print(
+                    f"[bold]Query #{idx}[/bold] [dim](line {line_no})[/dim]"
+                )
+                console.print(f"[dim]{display_sql}[/dim]")
+            else:
+                print(f"Query #{idx} (line {line_no})")
+                print(f"  {display_sql}")
+
+            # Run the JOIN diagnostic
+            try:
+                diag = diagnose_empty_join(
+                    connector=connector,
+                    query=stmt,
+                )
+                if diag:
+                    print_join_diagnostic(diag, colored=colored)
+                else:
+                    if colored:
+                        console.print(
+                            "[yellow]  Skipped — fewer than 2 tables detected.[/yellow]\n"
+                        )
+                    else:
+                        print("  Skipped — fewer than 2 tables detected.\n")
+            except Exception as e:
+                if colored:
+                    console.print(f"[red]  Error: {e}[/red]\n")
+                else:
+                    print(f"  Error: {e}\n")
+
+        # Summary
+        if colored:
+            console.print(
+                f"\n[bold green]JOIN analysis complete — "
+                f"{len(join_queries)} "
+                f"{'query' if len(join_queries) == 1 else 'queries'} analyzed.[/bold green]"
+            )
+        else:
+            print(
+                f"\nJOIN analysis complete — "
+                f"{len(join_queries)} "
+                f"{'query' if len(join_queries) == 1 else 'queries'} analyzed."
+            )
+
+    finally:
+        connector.close()
+
+
 def _interactive_detail_prompt(
     results: List[QueryResult],
     colored: bool = True,
@@ -703,15 +833,18 @@ def main() -> None:
     # Setup logging
     setup_logging(analyzer_config)
 
-    # Run analysis
-    results = run_analysis(db_config, analyzer_config, args.file)
+    # Run analysis based on selected mode
+    if analyzer_config.analysis_mode == "join-analyzer":
+        run_join_analysis(db_config, analyzer_config, args.file)
+    else:
+        results = run_analysis(db_config, analyzer_config, args.file)
 
-    # Save reports if requested
-    if analyzer_config.save_json:
-        save_json_report(results, analyzer_config.json_output_path)
+        # Save reports if requested
+        if analyzer_config.save_json:
+            save_json_report(results, analyzer_config.json_output_path)
 
-    if analyzer_config.save_csv:
-        save_csv_report(results, analyzer_config.csv_output_path)
+        if analyzer_config.save_csv:
+            save_csv_report(results, analyzer_config.csv_output_path)
 
 
 if __name__ == "__main__":

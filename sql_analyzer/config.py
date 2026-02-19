@@ -78,6 +78,7 @@ class AnalyzerConfig:
     csv_output_path: str = "performance_report.csv"
     colored_output: bool = True
     batch_mode: bool = False  # Print full results without interactive prompt
+    analysis_mode: str = "time-queries"  # "time-queries" or "join-analyzer"
 
     # AI backend: "openai", "ollama", or "groq"
     ai_backend: str = "openai"
