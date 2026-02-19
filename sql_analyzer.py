@@ -121,6 +121,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=300.0,
         help="Only show execution plan/AI for queries slower than this (ms, default: 300).",
     )
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="Run all queries at once — print full results (plan + AI) without interactive prompt.",
+    )
 
     # Output settings
     parser.add_argument(
@@ -284,6 +289,7 @@ def build_configs(args: argparse.Namespace) -> tuple[DatabaseConfig, AnalyzerCon
     analyzer_config.explain_analyze = args.explain_analyze
     analyzer_config.slow_query_threshold_ms = args.slow_threshold
     analyzer_config.interest_threshold_ms = args.interest_threshold
+    analyzer_config.batch_mode = args.batch
     analyzer_config.continue_on_error = not args.stop_on_error
     analyzer_config.save_json = args.save_json
     analyzer_config.json_output_path = args.json_path
@@ -521,18 +527,24 @@ def run_analysis(
                     if ai_advice:
                         result.suggestions.append(f"[AI] {ai_advice}")
 
-            # Print compact result (no execution plan or AI details)
-            print_query_result_compact(result, colored=colored)
+            # Print result
+            if analyzer_config.batch_mode:
+                # Batch mode: print full result including plan + AI
+                print_query_result(result, colored=colored)
+            else:
+                # Interactive mode: compact view, details on demand
+                print_query_result_compact(result, colored=colored)
 
         # Step 5: Print summary
         print_summary(results, colored=colored)
 
-        # Step 6: Interactive prompt for query details
-        _interactive_detail_prompt(
-            results,
-            colored=colored,
-            interest_threshold_ms=analyzer_config.interest_threshold_ms,
-        )
+        # Step 6: Interactive prompt for query details (skip in batch mode)
+        if not analyzer_config.batch_mode:
+            _interactive_detail_prompt(
+                results,
+                colored=colored,
+                interest_threshold_ms=analyzer_config.interest_threshold_ms,
+            )
 
         return results
 

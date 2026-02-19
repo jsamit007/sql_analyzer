@@ -77,6 +77,7 @@ class AnalyzerConfig:
     json_output_path: str = "performance_report.json"
     csv_output_path: str = "performance_report.csv"
     colored_output: bool = True
+    batch_mode: bool = False  # Print full results without interactive prompt
 
     # AI backend: "openai", "ollama", or "groq"
     ai_backend: str = "openai"
