@@ -31,8 +31,11 @@ pip install -r requirements.txt
 # Build the sample SQLite database
 python db/build_db.py
 
-# Run analysis
-python sql_analyzer.py --file sample.sql --db sqlite --sqlite-path db/database.db
+# Run analysis (full performance mode)
+python sql_analyzer.py --file sample.sql --time-queries --db sqlite --sqlite-path db/database.db
+
+# Run analysis (JOIN diagnostic mode)
+python sql_analyzer.py --file sample.sql --join-analyzer --db sqlite --sqlite-path db/database.db
 ```
 
 ## Usage
@@ -222,6 +225,7 @@ sql-parser/
 │   ├── sql_parser.py          # SQL file loading and query splitting
 │   ├── db_connector.py        # Database connection (PostgreSQL, SQL Server, SQLite)
 │   ├── executor.py            # Query execution with timing and EXPLAIN
+│   ├── join_analyzer.py       # JOIN decomposition diagnostics
 │   ├── plan_analyzer.py       # EXPLAIN plan parsing and scoring
 │   ├── suggestions.py         # Performance suggestion engine
 │   ├── ai_advisor.py          # AI integrations (OpenAI, Groq, Ollama)
@@ -230,7 +234,8 @@ sql-parser/
 │   ├── schema.sql             # Sample database schema (7 tables)
 │   ├── seed.sql               # Sample seed data
 │   ├── build_db.py            # Script to rebuild SQLite database
-│   └── database.db            # Pre-built SQLite database
+│   ├── database.db            # Pre-built SQLite database
+│   └── test_join.sql          # Complex JOIN test queries for --join-analyzer
 ├── sample.sql                 # 12 sample queries for testing
 ├── requirements.txt           # Python dependencies
 └── .gitignore

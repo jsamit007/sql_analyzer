@@ -26,6 +26,7 @@ The central data object that flows through the entire pipeline.
 | `suggestions` | `list[str]` | `[]` | Optimization advice (populated later) |
 | `performance_score` | `int \| None` | `None` | 1-10 score (populated later) |
 | `is_slow` | `bool` | `False` | Exceeds threshold (populated later) |
+| `join_diagnostic` | `Any \| None` | `None` | JoinDiagnostic if JOIN returned 0 rows (populated later) |
 
 ### `to_dict() → dict`
 
@@ -119,3 +120,26 @@ SQLite returns rows of `(id, parent, notused, detail)`. The function builds an i
 Iterates over all `(query, line_number)` tuples and calls `execute_query()` for each.
 
 If `continue_on_error=False` and a query fails, execution stops immediately. Otherwise, failures are recorded and execution continues with the next query.
+
+## `BatchResult` Dataclass
+
+Used by `--batch` mode when the entire SQL file is executed as a single script.
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | `bool` | Whether the script completed without error |
+| `total_statements` | `int` | Number of statements in the file |
+| `execution_time_ms` | `float` | Total script execution time |
+| `rows_affected` | `int` | Total rows from `cursor.rowcount` |
+| `error_message` | `str \| None` | Error details on failure |
+
+### `execute_as_script(connector, sql_content, total_statements) → BatchResult`
+
+Executes the full SQL file content as a single database call:
+
+- **SQLite:** Uses `cursor.executescript()` which handles multiple statements natively
+- **PostgreSQL / SQL Server:** Uses `cursor.execute()` with the full content (relies on the driver to handle multiple statements)
+
+Timing wraps the entire execution. On failure, rolls back and captures the error.

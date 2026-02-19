@@ -53,12 +53,15 @@ Controls execution behavior, output, and AI settings.
 |-------|------|---------|---------|
 | `explain_analyze` | `bool` | `False` | `EXPLAIN_ANALYZE` |
 | `slow_query_threshold_ms` | `float` | `500.0` | `SLOW_QUERY_THRESHOLD_MS` |
+| `interest_threshold_ms` | `float` | `300.0` | `INTEREST_THRESHOLD_MS` |
 | `continue_on_error` | `bool` | `True` | — (inverted from CLI `--stop-on-error`) |
 | `save_json` | `bool` | `False` | — |
 | `save_csv` | `bool` | `False` | — |
 | `json_output_path` | `str` | `"performance_report.json"` | — |
 | `csv_output_path` | `str` | `"performance_report.csv"` | — |
 | `colored_output` | `bool` | `True` | `COLORED_OUTPUT` |
+| `batch_mode` | `bool` | `False` | — (set via CLI `--batch`) |
+| `analysis_mode` | `str` | `"time-queries"` | — (set via CLI `--time-queries` / `--join-analyzer`) |
 | `ai_backend` | `str` | `"openai"` | `AI_BACKEND` |
 | `openai_enabled` | `bool` | `False` | `OPENAI_ENABLED` |
 | `openai_api_key` | `str` | `""` | `OPENAI_API_KEY` |

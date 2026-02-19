@@ -8,7 +8,31 @@ Handles all output: Rich colored console panels, plain text fallback, JSON expor
 
 ### `print_query_result(result, colored=True)`
 
-Dispatcher — calls either `_print_query_result_rich()` or `_print_query_result_plain()`.
+Full query result — calls either `_print_query_result_rich()` or `_print_query_result_plain()`. Shows all details: timing, score, EXPLAIN plan, warnings, suggestions, and AI advice. Used in `--batch` mode.
+
+### `print_query_result_compact(result, colored=True)`
+
+Compact summary — shows timing, score, warnings, and suggestions, but **omits** the EXPLAIN plan and AI output. Appends an `[i]` note indicating details are available via the interactive prompt. Used in default interactive mode (`--time-queries` without `--batch`).
+
+### `print_query_detail(result, colored=True)`
+
+Displays only the EXPLAIN plan and AI suggestions for a single query. Called from the interactive detail prompt when the user selects a query number.
+
+### `print_join_diagnostic(diagnostic, colored=True)`
+
+Renders the JOIN decomposition analysis. Dispatches to `_print_join_diagnostic_rich()` or `_print_join_diagnostic_plain()`.
+
+**Rich mode** shows:
+- Panel titled "JOIN Diagnostic" with yellow border
+- Table of individual table row counts (with ✓/✗ status)
+- Table of incremental JOIN steps (with row counts and drop detection)
+- Red-bordered panel with root cause explanation
+
+**Plain mode** shows the same data with `=` separators and text indicators.
+
+### `print_batch_result(batch_result, colored=True)`
+
+Displays the result of `--batch` mode execution: success/failure, statement count, total time, rows affected. Used when the entire SQL file is run as a single script.
 
 ### `_print_query_result_rich(result)`
 

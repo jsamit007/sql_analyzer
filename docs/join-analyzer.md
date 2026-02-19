@@ -17,13 +17,25 @@ When a multi-JOIN `SELECT` query returns **0 rows**, it can be difficult to tell
 
 ## When It Triggers
 
-The diagnostic runs automatically during normal (non-batch) analysis when **all three** conditions are met:
+The JOIN analyzer runs in two contexts:
+
+### 1. `--join-analyzer` mode (dedicated)
+
+Run with `--join-analyzer` to analyze **only** SELECT queries with JOINs. All matching queries are diagnosed regardless of row count. Non-JOIN and non-SELECT queries are skipped.
+
+```bash
+python sql_analyzer.py --file queries.sql --join-analyzer --db sqlite --sqlite-path db/database.db
+```
+
+### 2. `--time-queries` mode (automatic)
+
+During normal performance analysis (`--time-queries`), the diagnostic triggers automatically when **all three** conditions are met:
 
 - The query type is `SELECT`
 - The result has `rows_affected == 0`
 - The query contains at least one `JOIN` keyword
 
-No CLI flag is needed — it activates only when relevant.
+In this mode it supplements the timing/EXPLAIN analysis — no extra flag needed.
 
 ## Data Structures
 

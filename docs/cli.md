@@ -66,10 +66,12 @@ The main pipeline. Executes in this order:
 5. For each result:
    a. analyze_query_plan()  → PlanMetrics
    b. generate_suggestions() → (warnings, suggestions)
-   c. get_*_suggestions()   → AI advice (optional)
-   d. print_query_result()  → console output
+   c. get_*_suggestions()   → AI advice (optional, for queries above interest threshold)
+   d. diagnose_empty_join() → JoinDiagnostic (auto, for SELECT+JOIN with 0 rows)
+   e. print_query_result()  → console output
 6. print_summary()          → summary table
-7. connector.close()
+7. _interactive_detail_prompt() → user picks queries to inspect
+8. connector.close()
 ```
 
 ### `main()`

@@ -2,9 +2,14 @@
 
 ## Overview
 
-SQL Analyzer is a modular Python CLI tool that analyzes SQL file performance. It follows a **linear pipeline** architecture — each stage processes data and passes results to the next.
+SQL Analyzer is a modular Python CLI tool that analyzes SQL files. It supports two mutually exclusive modes selected via CLI flags:
 
-## Pipeline Flow
+- **`--time-queries`** — Full performance pipeline: execute, time, EXPLAIN, suggestions, AI
+- **`--join-analyzer`** — JOIN diagnostic mode: filter to SELECT+JOIN queries, run table counts and incremental join step analysis
+
+Both modes share the SQL parser, DB connector, and report modules.
+
+## Pipeline Flow (`--time-queries`)
 
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌──────────────┐
@@ -39,6 +44,27 @@ SQL Analyzer is a modular Python CLI tool that analyzes SQL file performance. It
                                                           │ JSON / CSV   │
                                                           └──────────────┘
 ```
+
+## Pipeline Flow (`--join-analyzer`)
+
+```
+┌─────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  SQL Parser  │───▶│  Filter to   │───▶│JOIN Analyzer │───▶│    Report    │
+│              │    │  SELECT+JOIN │    │              │    │              │
+│ Load .sql    │    │  queries     │    │ Table counts │    │ Rich console │
+│ Split queries│    │  (skip rest) │    │ Incr. steps  │    │ diagnostics  │
+│ Track lines  │    │              │    │ Root cause   │    │              │
+└─────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+                         │
+                   ┌─────┴───────┐
+                   │  DB Connect  │
+                   │  PostgreSQL  │
+                   │  SQL Server  │
+                   │  SQLite      │
+                   └─────────────┘
+```
+
+Skips: timing analysis, EXPLAIN plans, AI suggestions, performance scoring, interactive prompt.
 
 ## Module Dependency Graph
 
@@ -119,6 +145,8 @@ Encrypted database passwords, stored as Fernet tokens in a JSON file. Machine-bo
 
 6. **Line number tracking** — Statements are correlated back to the original file by searching for the first meaningful line of each parsed statement in the raw file content. This survives comment stripping and whitespace normalization.
 
+7. **Secure password handling** — Database passwords are never stored in plain text. They are prompted with hidden input (`getpass`), encrypted with Fernet (AES-128-CBC + HMAC-SHA256), and saved to a machine-bound `.credentials` file. CLI args and env vars still work as overrides for scripted usage.
+
 8. **JOIN decomposition** — When a multi-JOIN SELECT returns 0 rows, the analyzer automatically breaks the query apart, checks individual table row counts, and incrementally reconstructs the JOIN chain to pinpoint which table or condition causes the empty result. See [JOIN Analyzer](join-analyzer.md).
 
-7. **Secure password handling** — Database passwords are never stored in plain text. They are prompted with hidden input (`getpass`), encrypted with Fernet (AES-128-CBC + HMAC-SHA256), and saved to a machine-bound `.credentials` file. CLI args and env vars still work as overrides for scripted usage.
+9. **Two analysis modes** — The CLI requires one of `--time-queries` (full performance pipeline) or `--join-analyzer` (JOIN diagnostic only). This keeps the two concerns separate — timing analysis is about performance, while JOIN analysis is about correctness and data availability.
